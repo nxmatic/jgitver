@@ -1,0 +1,12 @@
+.settings/
+target/
+.classpath
+.project
+.checkstyle
+.idea/
+.okhttpcache/
+*.iml
+**/.flattened-pom.xml
+.factorypath
+.mvn/wrapper/maven-wrapper.jar
+pom-manipulation-ext.xml
