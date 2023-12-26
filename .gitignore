@@ -1,0 +1,9 @@
+.idea/
+target/
+.classpath
+.project
+.settings/
+.mvn/wrapper/maven-wrapper.jar
+.checkstyle
+*.iml
+pom-manipulation-ext.xml
