@@ -3,3 +3,5 @@ target/
 .project
 .settings/
 pom-manipulation-ext.xml
+m2e/.mvn/wrapper/maven-wrapper.jar
+m2e/.trash

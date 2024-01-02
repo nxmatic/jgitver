@@ -15,19 +15,11 @@
  */
 package fr.brouillard.oss.jgitver;
 
-import fr.brouillard.oss.jgitver.cfg.Configuration;
-import fr.brouillard.oss.jgitver.lambda.ThrowingFunction;
-import fr.brouillard.oss.jgitver.metadata.Metadatas;
+import io.vavr.control.Try;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
-import java.util.Properties;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -35,7 +27,6 @@ import org.apache.maven.AbstractMavenLifecycleParticipant;
 import org.apache.maven.MavenExecutionException;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.model.building.ModelProcessor;
-import org.codehaus.plexus.PlexusContainer;
 import org.codehaus.plexus.classworlds.realm.ClassRealm;
 import org.codehaus.plexus.logging.Logger;
 import org.commonjava.maven.ext.core.ManipulatingExtensionBridge;
@@ -44,8 +35,6 @@ import org.commonjava.maven.ext.core.ManipulatingExtensionBridge;
 @Singleton
 public class JGitverExtension extends AbstractMavenLifecycleParticipant {
   @Inject private Logger logger;
-
-  @Inject private PlexusContainer container;
 
   @Inject private ModelProcessor modelProcessor;
 
@@ -66,9 +55,9 @@ public class JGitverExtension extends AbstractMavenLifecycleParticipant {
   public void afterSessionStart(MavenSession mavenSession) throws MavenExecutionException {
     if (JGitverUtils.shouldSkip(mavenSession)) {
       logger.info("jgitver execution has been skipped by request of the user");
-      sessionHolder.setSession(mavenSession, null);
+      sessionHolder.closeSession(mavenSession);
     } else {
-      sessionHolder.setSession(mavenSession, opener.openSession(mavenSession));
+      sessionHolder.ensureSessionOpened(mavenSession);
     }
   }
 
@@ -80,8 +69,8 @@ public class JGitverExtension extends AbstractMavenLifecycleParticipant {
    * @throws MavenExecutionException if an error occurs while removing the JGitverSession
    */
   @Override
-  public void afterSessionEnd(MavenSession session) throws MavenExecutionException {
-    sessionHolder.setSession(session, null);
+  public void afterSessionEnd(MavenSession mavenSession) throws MavenExecutionException {
+    sessionHolder.closeSession(mavenSession);
   }
 
   /**
@@ -104,37 +93,41 @@ public class JGitverExtension extends AbstractMavenLifecycleParticipant {
     }
 
     File projectBaseDir = mavenSession.getCurrentProject().getBasedir();
-    try {
-      if (projectBaseDir != null
-          && !configurationProvider.ignore(new File(projectBaseDir, "pom.xml"))) {
-        if (isRunningInM2E(mavenSession)) {
-          m2eInvoker.invoke(() -> opener.ensureOpenSession(mavenSession));
-        }
-        if (sessionHolder.session(mavenSession).isEmpty()) {
-          JGitverUtils.failAsOldMechanism(cs -> logger.warn(cs.toString()));
-        }
-        sessionHolder
-            .session(mavenSession)
-            .ifPresent(
-                jgitverSession -> {
-                  logger.info("jgitver-maven-plugin is about to change project(s) version(s)");
-
-                  jgitverSession
-                      .getProjects()
-                      .forEach(
-                          gav ->
-                              logger.info(
-                                  "    "
-                                      + jgitverSession.getOriginalGAV(
-                                          gav, manipulatingBridge.readReport(mavenSession))
-                                      + " -> "
-                                      + jgitverSession.getVersion()));
-                });
-      }
-    } catch (IOException ex) {
-      new MavenExecutionException(
-          "cannot evaluate if jgitver should ignore base project directory: " + projectBaseDir, ex);
+    if (projectBaseDir == null) {
+      return;
     }
+
+    Try.run(
+            () -> {
+              if (configurationProvider.ignore(
+                  projectBaseDir.toPath().resolve("pom.xml").toFile())) {
+                return;
+              }
+              if (isRunningInM2E(mavenSession)) {
+                m2eInvoker.invoke(() -> sessionHolder.ensureSessionOpened(mavenSession));
+              }
+              sessionHolder
+                  .session(mavenSession)
+                  .andThenTry(
+                      jgitverSession -> {
+                        // log report
+                        logger.info(
+                            "jgitver-maven-plugin is about to change project(s) version(s)");
+
+                        jgitverSession
+                            .getProjects()
+                            .forEach(
+                                gav ->
+                                    logger.info(
+                                        "    "
+                                            + jgitverSession.getOriginalGAV(
+                                                gav, manipulatingBridge.readReport(mavenSession))
+                                            + " -> "
+                                            + jgitverSession.getVersion()));
+                      });
+            })
+        .getOrElseThrow(
+            cause -> new MavenExecutionException("cannot evaluate : " + projectBaseDir, cause));
   }
 
   private final Invoker m2eInvoker =
@@ -153,7 +146,7 @@ public class JGitverExtension extends AbstractMavenLifecycleParticipant {
   private interface Invoker {
     <T> T invoke(Invokable<T> invokable);
 
-    default void invoke(Runnable runnable) {
+    default void invoke(Runnable<Void> runnable) {
       invoke(
           () -> {
             runnable.invoke();
@@ -218,144 +211,5 @@ public class JGitverExtension extends AbstractMavenLifecycleParticipant {
 
   private boolean isRunningInM2E(MavenSession session) {
     return session.getUserProperties().containsKey("m2e.version");
-  }
-
-  private final SessionOpener opener = new SessionOpener();
-
-  class SessionOpener {
-
-    void ensureOpenSession(MavenSession mavenSession) {
-      sessionHolder.setSession(
-          mavenSession,
-          sessionHolder.session(mavenSession).orElseGet(() -> openSessionSneaky(mavenSession)));
-      sessionHolder.session(mavenSession).orElseThrow();
-    }
-
-    JGitverSession openSession(MavenSession mavenSession) throws MavenExecutionException {
-      final File rootDirectory = mavenSession.getRequest().getMultiModuleProjectDirectory();
-      try (GitVersionCalculator calculator = GitVersionCalculator.location(rootDirectory)) {
-        return openSession(mavenSession, calculator);
-      } catch (Exception ex) {
-        logger.warn(
-            "cannot autoclose GitVersionCalculator object for project: " + rootDirectory, ex);
-        return null;
-      }
-    }
-
-    JGitverSession openSessionSneaky(MavenSession mavenSession) {
-      try {
-        return openSession(mavenSession);
-      } catch (MavenExecutionException cause) {
-        return ThrowingFunction.sneakyThrow(cause);
-      }
-    }
-
-    private JGitverSession openSession(
-        MavenSession mavenSession, GitVersionCalculator gitVersionCalculator)
-        throws MavenExecutionException {
-      final File rootDirectory = mavenSession.getRequest().getMultiModuleProjectDirectory();
-
-      logger.debug("using " + JGitverUtils.EXTENSION_PREFIX + " on directory: " + rootDirectory);
-
-      Configuration cfg = configurationProvider.getConfiguration();
-
-      if (cfg.strategy != null) {
-        gitVersionCalculator.setStrategy(cfg.strategy);
-      } else {
-        gitVersionCalculator.setMavenLike(cfg.mavenLike);
-      }
-
-      if (cfg.policy != null) {
-        gitVersionCalculator.setLookupPolicy(cfg.policy);
-      }
-
-      gitVersionCalculator
-          .setAutoIncrementPatch(cfg.autoIncrementPatch)
-          .setUseDirty(cfg.useDirty)
-          .setUseDistance(cfg.useCommitDistance)
-          .setUseGitCommitTimestamp(cfg.useGitCommitTimestamp)
-          .setUseGitCommitId(cfg.useGitCommitId)
-          .setUseSnapshot(cfg.useSnapshot)
-          .setGitCommitIdLength(cfg.gitCommitIdLength)
-          .setUseDefaultBranchingPolicy(cfg.useDefaultBranchingPolicy)
-          .setNonQualifierBranches(cfg.nonQualifierBranches)
-          .setVersionPattern(cfg.versionPattern)
-          .setTagVersionPattern(cfg.tagVersionPattern)
-          .setScript(cfg.script)
-          .setScriptType(cfg.scriptType);
-
-      if (cfg.maxSearchDepth >= 1 && cfg.maxSearchDepth != Configuration.UNSET_DEPTH) {
-        // keep redundant test in case we change UNSET_DEPTH value
-        gitVersionCalculator.setMaxDepth(cfg.maxSearchDepth);
-      }
-
-      if (JGitverUtils.shouldForceComputation(mavenSession)) {
-        gitVersionCalculator.setForceComputation(true);
-      }
-
-      if (cfg.regexVersionTag != null) {
-        gitVersionCalculator.setFindTagVersionPattern(cfg.regexVersionTag);
-      }
-
-      if (cfg.branchPolicies != null && !cfg.branchPolicies.isEmpty()) {
-        List<BranchingPolicy> policies =
-            cfg.branchPolicies.stream()
-                .map(bp -> new BranchingPolicy(bp.pattern, bp.transformations))
-                .collect(Collectors.toList());
-
-        gitVersionCalculator.setQualifierBranchingPolicies(policies);
-      }
-
-      logger.info(
-          String.format(
-              "Using jgitver-maven-plugin [%s] (sha1: %s)",
-              JGitverMavenPluginProperties.getVersion(), JGitverMavenPluginProperties.getSHA1()));
-      long start = System.currentTimeMillis();
-
-      String computedVersion = gitVersionCalculator.getVersion();
-
-      long duration = System.currentTimeMillis() - start;
-      logger.info(String.format("    version '%s' computed in %d ms", computedVersion, duration));
-      logger.info("");
-
-      boolean isDirty =
-          gitVersionCalculator
-              .meta(Metadatas.DIRTY)
-              .map(Boolean::parseBoolean)
-              .orElse(Boolean.FALSE);
-
-      if (cfg.failIfDirty && isDirty) {
-        throw new IllegalStateException("repository is dirty");
-      }
-
-      JGitverInformationProvider infoProvider = Providers.decorate(gitVersionCalculator);
-      JGitverInformationProvider finalInfoProvider = infoProvider;
-      infoProvider =
-          JGitverUtils.versionOverride(mavenSession, logger)
-              .map(version -> Providers.fixVersion(version, finalInfoProvider))
-              .orElse(infoProvider);
-
-      // Put metadatas into Maven session properties
-      JGitverUtils.fillPropertiesFromMetadatas(
-          mavenSession.getUserProperties(), infoProvider, logger);
-
-      // Put metadatas into exportedProps file (if requested)
-      Optional<String> exportPropsPathOpt = JGitverUtils.exportPropertiesPath(mavenSession, logger);
-      if (exportPropsPathOpt.isPresent()) {
-        Properties exportedProps = new Properties();
-        JGitverUtils.fillPropertiesFromMetadatas(exportedProps, infoProvider, logger);
-        String exportPropsPath = exportPropsPathOpt.get();
-        try (OutputStream os = new FileOutputStream(exportPropsPath)) {
-          exportedProps.store(
-              os, "Output from " + JGitverUtils.EXTENSION_ARTIFACT_ID + " execution.");
-          logger.info("Properties exported to file \"" + exportPropsPath + "\"");
-        } catch (IOException ex) {
-          throw new IllegalArgumentException(
-              "Cannot write properties to file \"" + exportPropsPath + "\"", ex);
-        }
-      }
-
-      return new JGitverSession(infoProvider, rootDirectory);
-    }
   }
 }

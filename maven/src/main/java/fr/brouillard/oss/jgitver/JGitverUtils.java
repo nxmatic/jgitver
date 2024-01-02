@@ -47,6 +47,7 @@ import org.apache.maven.settings.Profile;
 import org.codehaus.plexus.classworlds.realm.ClassRealm;
 import org.codehaus.plexus.logging.Logger;
 import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
+import org.commonjava.maven.ext.io.PomIO;
 
 /** Misc utils used by the plugin. */
 public final class JGitverUtils {
@@ -96,6 +97,22 @@ public final class JGitverUtils {
     String OVERRIDE_CONFIG_FILE = EXTENSION_PREFIX + ".config";
   }
 
+  interface TryModule {
+
+    static boolean isFatal(Throwable throwable) {
+      return throwable instanceof InterruptedException
+          || throwable instanceof LinkageError
+          || throwable instanceof ThreadDeath
+          || throwable instanceof VirtualMachineError;
+    }
+
+    // DEV-NOTE: we do not plan to expose this as public API
+    @SuppressWarnings("unchecked")
+    static <T extends Throwable, R> R sneakyThrow(Throwable t) throws T {
+      throw (T) t;
+    }
+  }
+
   private JGitverUtils() {}
 
   /**
@@ -110,18 +127,6 @@ public final class JGitverUtils {
     try (FileReader fileReader = new FileReader(pomFile)) {
       return new MavenXpp3Reader().read(fileReader);
     }
-  }
-
-  /**
-   * Creates temporary file to save updated pom mode.
-   *
-   * @return File.
-   * @throws IOException IOException.
-   */
-  public static File createPomDumpFile() throws IOException {
-    File tmp = File.createTempFile("pom", ".jgitver-maven-plugin.xml");
-    tmp.deleteOnExit();
-    return tmp;
   }
 
   /**
@@ -219,6 +224,7 @@ public final class JGitverUtils {
    * @throws XmlPullParserException if project model cannot be interpreted correctly
    */
   public static void attachModifiedPomFilesToTheProject(
+      PomIO pomIO,
       List<MavenProject> projects,
       Set<GAV> gavs,
       String version,
@@ -252,7 +258,7 @@ public final class JGitverUtils {
         resolveProjectVersionVariable(version, model);
       }
 
-      File newPom = createPomDumpFile();
+      File newPom = pomIO.createTemporaryPOMDumpFile();
       writeModelPom(model, newPom);
       logger.debug("    new pom file created for " + initalProjectGAV + " under " + newPom);
 

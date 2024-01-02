@@ -23,9 +23,44 @@
     <version>0</version>
     <packaging>pom</packaging>
     
+    <build>
+      <pluginManagement>
+	<plugins>
+	  <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-resources-plugin</artifactId>
+	    <version>3.3.1</version>
+	  </plugin>
+	</plugins>
+      </pluginManagement>
+    </build>
+      
     <modules>
       <module>core</module>
       <module>maven</module>
     </modules>
+
+  <profiles>
+    <profile>
+      <id>redhat-ga</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <repositories>
+        <repository>
+          <id>redhat-ga</id>
+          <url>https://maven.repository.redhat.com/ga/</url>
+          <releases>
+            <enabled>true</enabled>
+            <checksumPolicy>fail</checksumPolicy>
+            <updatePolicy>never</updatePolicy>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+    </profile>
+  </profiles>
 
 </project>

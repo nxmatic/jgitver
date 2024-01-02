@@ -16,9 +16,6 @@
 
 package fr.brouillard.oss.jgitver;
 
-import fr.brouillard.oss.jgitver.lambda.ThrowingFunction;
-import java.util.Set;
-import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -26,9 +23,6 @@ import org.apache.maven.eventspy.AbstractEventSpy;
 import org.apache.maven.execution.ExecutionEvent;
 import org.apache.maven.execution.ExecutionEvent.Type;
 import org.apache.maven.execution.MavenSession;
-import org.apache.maven.model.Model;
-import org.commonjava.maven.ext.common.ManipulationException;
-import org.commonjava.maven.ext.common.model.Project;
 
 /**
  * An event spy for Maven that ensures the project version is replaced with the JGitver calculated
@@ -41,27 +35,13 @@ import org.commonjava.maven.ext.common.model.Project;
 @Singleton
 public class JGitverEventSpy extends AbstractEventSpy {
 
-  final JGitverPomIO pomIO;
+  @Inject JGitverPomIO pomIO;
 
-  final JGitverSessionHolder sessionHolder;
+  @Inject JGitverSessionHolder sessionHolder;
 
-  final JGitverModelProcessor processor;
+  @Inject JGitverProjectVersioner projectVersioner;
 
-  /**
-   * Constructs a new {@link JGitverEventSpy} with the provided session holder, model processor, and
-   * POM I/O.
-   *
-   * @param sessionHolder the session holder to use
-   * @param processor the model processor to use
-   * @param pomIO the POM I/O to use
-   */
-  @Inject
-  public JGitverEventSpy(
-      JGitverSessionHolder sessionHolder, JGitverModelProcessor processor, JGitverPomIO pomIO) {
-    this.sessionHolder = sessionHolder;
-    this.processor = processor;
-    this.pomIO = pomIO;
-  }
+  @Inject JGitverModelProcessor processor;
 
   /**
    * Handles Maven execution events. When a ProjectDiscoveryStarted event is received, this method
@@ -83,53 +63,10 @@ public class JGitverEventSpy extends AbstractEventSpy {
       }
 
       MavenSession mavenSession = ee.getSession();
-      sessionHolder
-          .session(mavenSession)
-          .ifPresent(session -> this.onProject(mavenSession, session));
+
+      sessionHolder.ensureSessionOpened(mavenSession);
     } finally {
       super.onEvent(event);
-    }
-  }
-
-  /**
-   * Parses the requested project POM file into a list of Project modules and updates their version
-   * using the JGitver computed version.
-   *
-   * <p>This method uses the {@link PomIO} to write the POM file. The logic for this method is
-   * mainly based onto the maven-pom-manipulation plugin IO module.
-   *
-   * @param session the current JGitver session
-   * @param mavenSession the related maven session
-   * @throws ManipulationException if an error occurs while manipulating the POM file (sneaky
-   *     thrown)
-   */
-  void onProject(MavenSession mavenSession, JGitverSession session) {
-    try {
-      Set<Project> modules =
-          pomIO.parseProject(mavenSession.getRequest().getPom()).stream()
-              .peek(project -> setVersionOf(mavenSession, session, project))
-              .collect(Collectors.toSet());
-
-      pomIO.writeTemporaryPOMs(modules);
-    } catch (ManipulationException error) {
-      ThrowingFunction.sneakyThrow(error);
-    }
-  }
-
-  /**
-   * Set the module maven version of the module according to the JGitver computed version.
-   *
-   * @param session the JGitver session
-   * @return module the manipulated model of the module
-   */
-  void setVersionOf(MavenSession mavenSession, JGitverSession session, Project module) {
-    final Model model = module.getModel();
-    final String version = session.getVersion();
-    model.setVersion(version);
-    if (module.isExecutionRoot()) {
-      mavenSession.getRequest().setPom(pomIO.withUseVersion.apply(module.getPom()));
-    } else {
-      model.getParent().setVersion(version);
     }
   }
 }

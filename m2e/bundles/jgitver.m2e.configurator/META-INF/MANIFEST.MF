@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: JGitVer M2E Configurator
+Bundle-SymbolicName: jgitver.m2e.configurator;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Export-Package: fr.brouillard.oss.jgitver.eclipse
+Fragment-Host: org.eclipse.m2e.core;bundle-version="2.4.1.qualifier"
+Import-Package: io.vavr.control;version="0.10.4",
+ javax.inject;version="1.0.0"
+Automatic-Module-Name: jgitver.m2e.configurator
+Bundle-RequiredExecutionEnvironment: JavaSE-17

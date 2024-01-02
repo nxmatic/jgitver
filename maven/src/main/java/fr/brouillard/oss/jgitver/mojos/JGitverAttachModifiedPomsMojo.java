@@ -15,9 +15,11 @@
  */
 package fr.brouillard.oss.jgitver.mojos;
 
+import fr.brouillard.oss.jgitver.JGitverPomIO;
 import fr.brouillard.oss.jgitver.JGitverSession;
 import fr.brouillard.oss.jgitver.JGitverUtils;
 import java.util.Objects;
+import javax.inject.Inject;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -33,6 +35,8 @@ import org.codehaus.plexus.logging.console.ConsoleLogger;
     threadSafe = true)
 public class JGitverAttachModifiedPomsMojo extends AbstractMojo {
   public static final String GOAL_ATTACH_MODIFIED_POMS = "attach-modified-poms";
+
+  @Inject private JGitverPomIO pomIO;
 
   @Parameter(defaultValue = "${session}", readonly = true)
   private MavenSession mavenSession;
@@ -62,6 +66,7 @@ public class JGitverAttachModifiedPomsMojo extends AbstractMojo {
     try {
       JGitverSession jgitverSession = JGitverSession.serializeFrom(content);
       JGitverUtils.attachModifiedPomFilesToTheProject(
+          pomIO,
           mavenSession.getAllProjects(),
           jgitverSession.getProjects(),
           jgitverSession.getVersion(),

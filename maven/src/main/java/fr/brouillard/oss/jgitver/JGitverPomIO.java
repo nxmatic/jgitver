@@ -16,13 +16,8 @@
 package fr.brouillard.oss.jgitver;
 
 import com.google.inject.Singleton;
-import java.io.File;
-import java.nio.file.Path;
-import java.util.Set;
-import java.util.function.Function;
+import javax.enterprise.context.SessionScoped;
 import javax.inject.Named;
-import org.commonjava.maven.ext.common.ManipulationException;
-import org.commonjava.maven.ext.common.model.Project;
 import org.commonjava.maven.ext.io.PomIO;
 
 /**
@@ -33,23 +28,11 @@ import org.commonjava.maven.ext.io.PomIO;
  * to by the name "jgitver".
  */
 @Named("jgitver")
+@SessionScoped
 @Singleton
 public class JGitverPomIO extends PomIO {
 
-  /**
-   * Writes the provided project's POM (Project Object Model) to disk.
-   *
-   * @param project the project whose POM should be written
-   * @throws ManipulationException if an error occurs while writing the POM
-   */
-  public void writeTemporaryPOMs(Set<Project> projects) throws ManipulationException {
-    writeTemporaryPOMs(projects, withUseVersion);
+  public JGitverPomIO() {
+    super();
   }
-
-  /**
-   * A function that takes a File instance (representing a POM file), and returns a new File
-   * instance representing a sibling file named "pom-with-use-version.xml".
-   */
-  final Function<File, File> withUseVersion =
-      source -> pomResolver.apply(source, Path.of("pom-jgitver-plugin.xml"));
 }

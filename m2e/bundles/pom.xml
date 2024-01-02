@@ -1,0 +1,17 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>fr.brouillard.oss</groupId>
+    <artifactId>jgitver.m2e.parent</artifactId>
+    <version>0</version>
+  </parent>
+
+  <artifactId>jgitver.m2e.bundles</artifactId>
+  <packaging>pom</packaging>
+
+  <modules>
+    <module>jgitver.m2e.configurator</module>
+  </modules>
+
+</project>

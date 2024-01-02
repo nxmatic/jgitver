@@ -1,0 +1,116 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>fr.brouillard.oss</groupId>
+    <artifactId>jgitver-parent</artifactId>
+    <version>0</version>
+  </parent>
+
+  <artifactId>jgitver.m2e.parent</artifactId>
+  <packaging>pom</packaging>
+
+  <properties>
+    <tycho.version>4.0.4</tycho.version>
+  </properties>
+
+  <build>
+
+    <pluginManagement>
+      <plugins>
+
+	<plugin>
+          <groupId>org.eclipse.tycho</groupId>
+          <artifactId>tycho-maven-plugin</artifactId>
+          <version>${tycho.version}</version>
+          <extensions>true</extensions>
+        </plugin>
+
+        <plugin>
+          <groupId>org.eclipse.tycho</groupId>
+          <artifactId>tycho-p2-repository-plugin</artifactId>
+          <version>${tycho.version}</version>
+        </plugin>
+
+	<plugin>
+	  <groupId>org.eclipse.tycho</groupId>
+	  <artifactId>target-platform-configuration</artifactId>
+	  <version>${tycho.version}</version>
+	</plugin>
+
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
+
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>tycho-maven-plugin</artifactId>
+      </plugin>
+
+      <plugin>
+        <groupId>org.eclipse.tycho</groupId>
+        <artifactId>tycho-p2-repository-plugin</artifactId>
+      </plugin>
+
+      <plugin>
+	<groupId>org.eclipse.tycho</groupId>
+	<artifactId>target-platform-configuration</artifactId>
+
+	<configuration>
+	  <target>
+	    <file>${maven.multiModuleProjectDirectory}/m2e/target-platform.target</file>
+	  </target>
+	  <executionEnvironment>JavaSE-21</executionEnvironment>
+	  <environments>
+	    <environment>
+	      <os>linux</os>
+	      <ws>gtk</ws>
+	      <arch>x86_64</arch>
+	    </environment>
+	    <environment>
+	      <os>win32</os>
+	      <ws>win32</ws>
+	      <arch>x86_64</arch>
+	    </environment>
+	    <environment>
+	      <os>macosx</os>
+	      <ws>cocoa</ws>
+	      <arch>x86_64</arch>
+	    </environment>
+	  </environments>
+	</configuration>
+
+      </plugin>
+
+
+    </plugins>
+
+  </build>
+
+
+  <modules>
+    <module>releng</module>
+    <module>bundles</module>
+<!--
+    <module>plugins</module>
+    <module>tests</module>
+    <module>features</module>
+    <module>sites</module>
+    <module>products</module>
+ -->
+  </modules>
+
+  <repositories>
+    <repository>
+      <id>eclipse-latest</id>
+      <url>https://download.eclipse.org/releases/latest</url>
+      <layout>p2</layout>
+    </repository>
+    <repository>
+      <id>m2e-develop</id>
+      <url>file:/Volumes/Eclipse/Gits/m2e-core/org.eclipse.m2e.repository/target/repository</url>
+    </repository>
+  </repositories>
+
+</project>
